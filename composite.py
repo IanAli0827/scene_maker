@@ -199,35 +199,51 @@ def composite_scene(scene_name: str, design_path: str = None, output_path: str =
                     shadow_intensity: float = 1.0, rug_thickness: int = 6, debug: bool = False,
                     skip_render: bool = False, texture_strength: float = 0.55):
     """
-    Composite a rug into a scene.
+    Composite a rug into a scene with 2x supersampling for better quality.
 
     Args:
         scene_name: Scene configuration name
         design_path: Path to rug design image (optional, uses red placeholder if not provided)
         output_path: Output file path
         shadow_intensity: Shadow intensity (0-2)
-        rug_thickness: Rug edge thickness in pixels
+        rug_thickness: Rug edge thickness in pixels (at final resolution)
         debug: Enable debug output
         skip_render: Skip rug rendering (texture and seam effects)
         texture_strength: Texture effect strength (0-1)
     """
-    config = load_scene_config(scene_name)
-    scene_rgb = np.array(Image.open(config["image_path"]).convert("RGB"))
-    shadow_ref_rgb = np.array(Image.open(config["wf_path"]).convert("RGB"))
+    SCALE_FACTOR = 2  # 超采样倍率
 
-    h, w = scene_rgb.shape[:2]
+    config = load_scene_config(scene_name)
+
+    # 保存原始尺寸
+    scene_rgb_orig = np.array(Image.open(config["image_path"]).convert("RGB"))
+    orig_h, orig_w = scene_rgb_orig.shape[:2]
+
+    # 放大2倍处理
+    h, w = orig_h * SCALE_FACTOR, orig_w * SCALE_FACTOR
+    scene_rgb = cv2.resize(scene_rgb_orig, (w, h), interpolation=cv2.INTER_LINEAR)
+
+    shadow_ref_rgb_orig = np.array(Image.open(config["wf_path"]).convert("RGB"))
 
     # 检查并调整 wf 图尺寸
-    wf_h, wf_w = shadow_ref_rgb.shape[:2]
+    wf_h, wf_w = shadow_ref_rgb_orig.shape[:2]
     wf_ratio = wf_w / wf_h
-    scene_ratio = w / h
+    scene_ratio = orig_w / orig_h
 
     if abs(wf_ratio - scene_ratio) > 0.01:
-        print(f"警告: wf 图比例 ({wf_w}x{wf_h}, {wf_ratio:.3f}) 与原图比例 ({w}x{h}, {scene_ratio:.3f}) 不一致")
+        print(f"警告: wf 图比例 ({wf_w}x{wf_h}, {wf_ratio:.3f}) 与原图比例 ({orig_w}x{orig_h}, {scene_ratio:.3f}) 不一致")
 
-    if wf_h != h or wf_w != w:
-        print(f"自动调整 wf 图尺寸: {wf_w}x{wf_h} -> {w}x{h}")
-        shadow_ref_rgb = cv2.resize(shadow_ref_rgb, (w, h), interpolation=cv2.INTER_LINEAR)
+    # 先调整到原始尺寸，再放大2倍
+    if wf_h != orig_h or wf_w != orig_w:
+        print(f"自动调整 wf 图尺寸: {wf_w}x{wf_h} -> {orig_w}x{orig_h}")
+        shadow_ref_rgb_orig = cv2.resize(shadow_ref_rgb_orig, (orig_w, orig_h), interpolation=cv2.INTER_LINEAR)
+
+    # 放大2倍
+    shadow_ref_rgb = cv2.resize(shadow_ref_rgb_orig, (w, h), interpolation=cv2.INTER_LINEAR)
+
+    # 缩放角点坐标到2倍尺寸
+    scaled_corners = [(int(x * SCALE_FACTOR), int(y * SCALE_FACTOR)) for x, y in config["corners"]]
+    config["corners"] = scaled_corners
 
     # 加载或创建地毯图像
     if design_path:
@@ -237,25 +253,27 @@ def composite_scene(scene_name: str, design_path: str = None, output_path: str =
         rug_pil = Image.new("RGBA", (1000, 1000), (255, 0, 0, 255))
         print("使用红色占位地毯")
 
-    # 渲染地毯
+    # 渲染地毯（在2倍尺寸下）
     if not skip_render:
         print("应用地毯材质渲染...")
 
-        # 计算目标渲染尺寸
+        # 计算目标渲染尺寸（放大2倍）
         suitable_rug_size = config.get("suitable_rug_size")
         if suitable_rug_size and suitable_rug_size in SIZE_CONFIGS:
-            # 使用 SIZE_CONFIGS 中的预定义尺寸
+            # 使用 SIZE_CONFIGS 中的预定义尺寸，并放大2倍
             size_config = SIZE_CONFIGS[suitable_rug_size]
-            target_w = size_config["target_width"]
-            target_h = size_config["target_height"]
-            print(f"使用地毯尺寸: {suitable_rug_size} (渲染为 {target_w}x{target_h})")
+            target_w = size_config["target_width"] * SCALE_FACTOR
+            target_h = size_config["target_height"] * SCALE_FACTOR
+            print(f"使用地毯尺寸: {suitable_rug_size} (渲染为 {target_w}x{target_h}, 2倍超采样)")
         else:
-            # 如果没有指定尺寸或尺寸不在配置中，使用地毯当前尺寸
-            target_w, target_h = rug_pil.size
+            # 如果没有指定尺寸或尺寸不在配置中，使用地毯当前尺寸并放大2倍
+            orig_target_w, orig_target_h = rug_pil.size
+            target_w = orig_target_w * SCALE_FACTOR
+            target_h = orig_target_h * SCALE_FACTOR
             if suitable_rug_size:
-                print(f"警告: 尺寸 {suitable_rug_size} 不在 SIZE_CONFIGS 中，使用原始尺寸: {target_w}x{target_h}")
+                print(f"警告: 尺寸 {suitable_rug_size} 不在 SIZE_CONFIGS 中，使用原始尺寸x2: {target_w}x{target_h}")
             else:
-                print(f"使用地毯原始尺寸: {target_w}x{target_h}")
+                print(f"使用地毯原始尺寸x2: {target_w}x{target_h}")
 
         rug_pil_rendered = render_rug_image(
             rug_pil,
@@ -268,43 +286,52 @@ def composite_scene(scene_name: str, design_path: str = None, output_path: str =
     else:
         print("跳过地毯渲染")
         rug_rgba = np.array(rug_pil)
-    
+
     src_pts = np.float32([(0, 0), (rug_rgba.shape[1], 0), (rug_rgba.shape[1], rug_rgba.shape[0]), (0, rug_rgba.shape[0])])
     dst_pts = np.float32(config["corners"])
     M = cv2.getPerspectiveTransform(src_pts, dst_pts)
-    
+
     warped_rgb = cv2.warpPerspective(rug_rgba[:, :, :3], M, (w, h), flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_REPLICATE)
     warped_alpha = cv2.warpPerspective(rug_rgba[:, :, 3], M, (w, h), flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_CONSTANT, borderValue=0)
     warped_rug = np.dstack([warped_rgb, warped_alpha])
-    
+
     top_mask = warped_rug[:, :, 3].copy()
-    warped_rug = add_thickness_to_visible_edges(warped_rug, config["corners"], thickness=rug_thickness)
+    # 厚度参数也需要放大2倍
+    warped_rug = add_thickness_to_visible_edges(warped_rug, config["corners"], thickness=rug_thickness * SCALE_FACTOR)
     warped_rug = apply_lighting(warped_rug, shadow_ref_rgb, shadow_intensity)
-    
-    warped_rug = gaussian_blur_edges(warped_rug, radius=1, erode=True)
+
+    # 模糊半径放大2倍
+    warped_rug = gaussian_blur_edges(warped_rug, radius=1 * SCALE_FACTOR, erode=True)
     alpha = warped_rug[:, :, 3].astype(np.float32) / 255.0
     result = scene_rgb.astype(np.float32)
     for c in range(3):
         result[:, :, c] = result[:, :, c] * (1.0 - alpha) + warped_rug[:, :, c].astype(np.float32) * alpha
-    
+
     if config["fg_path"]:
-        fg = np.array(Image.open(config["fg_path"]).convert("RGBA"))
-        fg_h, fg_w = fg.shape[:2]
+        fg_orig = np.array(Image.open(config["fg_path"]).convert("RGBA"))
+        fg_h, fg_w = fg_orig.shape[:2]
         fg_ratio = fg_w / fg_h
-        
+
         if abs(fg_ratio - scene_ratio) > 0.01:
-            print(f"警告: fg 图比例 ({fg_w}x{fg_h}, {fg_ratio:.3f}) 与原图比例 ({w}x{h}, {scene_ratio:.3f}) 不一致")
-        
-        if fg_h != h or fg_w != w:
-            print(f"自动调整 fg 图尺寸: {fg_w}x{fg_h} -> {w}x{h}")
-            fg = cv2.resize(fg, (w, h), interpolation=cv2.INTER_LINEAR)
-        
-        fg = gaussian_blur_edges(fg, radius=2, erode=False)
+            print(f"警告: fg 图比例 ({fg_w}x{fg_h}, {fg_ratio:.3f}) 与原图比例 ({orig_w}x{orig_h}, {scene_ratio:.3f}) 不一致")
+
+        # 先调整到原始尺寸，再放大2倍
+        if fg_h != orig_h or fg_w != orig_w:
+            print(f"自动调整 fg 图尺寸: {fg_w}x{fg_h} -> {orig_w}x{orig_h}")
+            fg_orig = cv2.resize(fg_orig, (orig_w, orig_h), interpolation=cv2.INTER_LINEAR)
+
+        fg = cv2.resize(fg_orig, (w, h), interpolation=cv2.INTER_LINEAR)
+
+        # 模糊半径放大2倍
+        fg = gaussian_blur_edges(fg, radius=2 * SCALE_FACTOR, erode=False)
         fg_a = fg[:, :, 3].astype(np.float32) / 255.0
         for c in range(3):
             result[:, :, c] = result[:, :, c] * (1.0 - fg_a) + fg[:, :, c].astype(np.float32) * fg_a
-            
-    Image.fromarray(result.astype(np.uint8)).save(output_path)
+
+    # 缩小回原始尺寸
+    result_orig = cv2.resize(result.astype(np.uint8), (orig_w, orig_h), interpolation=cv2.INTER_AREA)
+
+    Image.fromarray(result_orig).save(output_path)
     print(f"已保存: {output_path}")
 
 if __name__ == "__main__":

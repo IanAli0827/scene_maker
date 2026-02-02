@@ -1,0 +1,10 @@
+room_type: bedroom
+styles: ['modern']
+images:
+  original: pp84.png
+  fg: pp84_fg.png
+top_left: [997, 802]
+top_right: [1880, 896]
+bottom_right: [2232, 2150]
+bottom_left: [-72, 1512]
+suitable_rug_size: 8x10
