@@ -1,0 +1,12 @@
+{
+  "manifest_version": 3,
+  "name": "Eraser Tool",
+  "version": "1.0",
+  "permissions": ["tabs"],
+  "action": {
+    "default_title": "Eraser Tool"
+  },
+  "background": {
+    "service_worker": "background.js"
+  }
+}

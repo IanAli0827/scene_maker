@@ -1,0 +1,9 @@
+room_type: dining_room
+styles: ['modern']
+images:
+  original: g1u5.png
+top_left: [55, 1514]
+top_right: [1113, 1382]
+bottom_right: [2856, 1907]
+bottom_left: [1242, 2765]
+suitable_rug_size: 6x9

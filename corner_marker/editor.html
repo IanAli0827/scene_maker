@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      background: #1a1a1a;
+      color: #fff;
+      overflow: hidden;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+    .toolbar {
+      background: rgba(0, 0, 0, 0.9);
+      padding: 10px 15px;
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      border-bottom: 1px solid #333;
+      flex-wrap: wrap;
+    }
+    .toolbar h1 {
+      font-size: 16px;
+      color: #7B8CDE;
+      margin-right: 15px;
+    }
+    .toolbar button {
+      padding: 8px 14px;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 13px;
+      background: #333;
+      color: #fff;
+      transition: all 0.2s;
+    }
+    .toolbar button:hover { background: #444; }
+    .toolbar button.btn-green { background: #5B7C99; }
+    .toolbar button.btn-green:hover { background: #4A6B88; }
+    .toolbar button.btn-blue { background: #6B7FA8; }
+    .toolbar button.btn-blue:hover { background: #5A6E97; }
+    .toolbar button.btn-red { background: #8B7C8C; }
+    .toolbar button.btn-red:hover { background: #7A6B7B; }
+
+    .size-select {
+      padding: 7px 10px;
+      background: #333;
+      border: 1px solid #444;
+      border-radius: 4px;
+      color: #fff;
+      font-size: 13px;
+      cursor: pointer;
+      margin-left: 10px;
+    }
+    .size-select:hover { background: #444; }
+    .size-select:focus {
+      outline: none;
+      border-color: #7B8CDE;
+    }
+
+    .coords-panel {
+      display: flex;
+      gap: 8px;
+      margin-left: 15px;
+      align-items: center;
+    }
+    .coord-group {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .coord-label {
+      font-size: 14px;
+      font-weight: bold;
+      width: 28px;
+    }
+    .coord-input {
+      width: 55px;
+      padding: 4px 6px;
+      background: #333;
+      border: 1px solid #444;
+      border-radius: 3px;
+      color: #fff;
+      font-size: 12px;
+      text-align: center;
+    }
+    .coord-input:focus {
+      outline: none;
+      border-color: #7B8CDE;
+    }
+    .coord-separator {
+      color: #666;
+      font-size: 12px;
+    }
+
+    #status {
+      color: #7B8CDE;
+      font-size: 13px;
+      margin-left: 15px;
+    }
+
+    .canvas-container {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      background: #0a0a0a;
+      position: relative;
+    }
+
+    #canvas {
+      border: 2px solid #333;
+      cursor: crosshair;
+    }
+
+    #info {
+      position: fixed;
+      bottom: 20px;
+      left: 20px;
+      background: rgba(0, 0, 0, 0.8);
+      padding: 10px 15px;
+      border-radius: 6px;
+      font-size: 12px;
+      color: #888;
+    }
+  </style>
+</head>
+<body>
+  <div class="toolbar">
+    <h1>Corner Marker</h1>
+    <button id="loadImgBtn" class="btn-blue">📁 加载图片</button>
+    <button id="saveBtn" class="btn-green">💾 保存</button>
+    <button id="resetBtn" class="btn-red">🔄 重置</button>
+    <input type="file" id="fileInput" accept="image/*" style="display:none">
+    
+    <select id="sizeSelect" class="size-select">
+      <option value="2x3">2x3</option>
+      <option value="3x5">3x5</option>
+      <option value="4x6">4x6</option>
+      <option value="5x7">5x7</option>
+      <option value="6x9">6x9</option>
+      <option value="8x10" selected>8x10</option>
+    </select>
+
+    <div class="coords-panel">
+      <div class="coord-group">
+        <span class="coord-label" style="color:#7B8CDE" title="Top Left">TL</span>
+        <input type="number" class="coord-input" data-point="0" data-axis="x" placeholder="x">
+        <span class="coord-separator">,</span>
+        <input type="number" class="coord-input" data-point="0" data-axis="y" placeholder="y">
+      </div>
+      <div class="coord-group">
+        <span class="coord-label" style="color:#8B9DC3" title="Top Right">TR</span>
+        <input type="number" class="coord-input" data-point="1" data-axis="x" placeholder="x">
+        <span class="coord-separator">,</span>
+        <input type="number" class="coord-input" data-point="1" data-axis="y" placeholder="y">
+      </div>
+      <div class="coord-group">
+        <span class="coord-label" style="color:#9BAEC9" title="Bottom Right">BR</span>
+        <input type="number" class="coord-input" data-point="2" data-axis="x" placeholder="x">
+        <span class="coord-separator">,</span>
+        <input type="number" class="coord-input" data-point="2" data-axis="y" placeholder="y">
+      </div>
+      <div class="coord-group">
+        <span class="coord-label" style="color:#A8B5CC" title="Bottom Left">BL</span>
+        <input type="number" class="coord-input" data-point="3" data-axis="x" placeholder="x">
+        <span class="coord-separator">,</span>
+        <input type="number" class="coord-input" data-point="3" data-axis="y" placeholder="y">
+      </div>
+    </div>
+
+    <span id="status"></span>
+  </div>
+
+  <div class="canvas-container">
+    <canvas id="canvas"></canvas>
+    <div id="info">加载图片开始标注 • 拖动数字到四角 • 滚轮缩放 • 右键平移</div>
+  </div>
+
+  <script src="editor.js"></script>
+</body>
+</html>

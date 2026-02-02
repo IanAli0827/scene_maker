@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      background: #1a1a1a;
+      color: #fff;
+      overflow: hidden;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+    .toolbar {
+      background: rgba(0, 0, 0, 0.9);
+      padding: 10px 15px;
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      border-bottom: 1px solid #333;
+      flex-wrap: wrap;
+      max-height: 120px;
+      overflow-y: auto;
+    }
+    .toolbar h1 {
+      font-size: 16px;
+      color: #9B8CBA;
+      margin-right: 15px;
+    }
+    .toolbar button {
+      padding: 8px 14px;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 13px;
+      background: #333;
+      color: #fff;
+      transition: all 0.2s;
+    }
+    .toolbar button:hover { background: #444; }
+    .toolbar button.btn-green { background: #5B7C99; }
+    .toolbar button.btn-green:hover { background: #4A6B88; }
+    .toolbar button.btn-blue { background: #6B7FA8; }
+    .toolbar button.btn-blue:hover { background: #5A6E97; }
+    .toolbar button.btn-red { background: #8B7C8C; }
+    .toolbar button.btn-red:hover { background: #7A6B7B; }
+    .toolbar button.active {
+      background: #9B8CBA;
+      box-shadow: 0 0 8px rgba(155, 140, 186, 0.4);
+    }
+
+    .tool-group {
+      display: flex;
+      gap: 5px;
+      margin-left: 15px;
+      padding-left: 15px;
+      border-left: 1px solid #444;
+    }
+
+    .control-group {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-left: 15px;
+      padding: 6px 12px;
+      background: #2a2a2a;
+      border-radius: 4px;
+    }
+    .control-label {
+      font-size: 12px;
+      color: #aaa;
+      min-width: 60px;
+    }
+    .slider {
+      width: 120px;
+      height: 4px;
+      border-radius: 2px;
+      background: #444;
+      outline: none;
+      -webkit-appearance: none;
+    }
+    .slider::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: #9B8CBA;
+      cursor: pointer;
+    }
+    .slider-value {
+      min-width: 35px;
+      text-align: center;
+      font-size: 12px;
+      color: #9B8CBA;
+      font-weight: bold;
+    }
+
+    #status {
+      color: #7B8CDE;
+      font-size: 13px;
+      margin-left: auto;
+    }
+
+    .canvas-container {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      background: #0a0a0a;
+      position: relative;
+    }
+
+    #canvas {
+      border: 2px solid #333;
+      cursor: crosshair;
+    }
+
+    #info {
+      position: fixed;
+      bottom: 20px;
+      left: 20px;
+      background: rgba(0, 0, 0, 0.8);
+      padding: 10px 15px;
+      border-radius: 6px;
+      font-size: 12px;
+      color: #888;
+      line-height: 1.6;
+    }
+  </style>
+</head>
+<body>
+  <div class="toolbar">
+    <h1>Eraser</h1>
+    <button id="loadImgBtn" class="btn-blue">📁 加载图片</button>
+    <button id="saveBtn" class="btn-green">💾 保存</button>
+    <button id="undoBtn" class="btn-red">↩️ 撤销</button>
+    <input type="file" id="fileInput" accept="image/*" style="display:none">
+
+    <div class="tool-group">
+      <button id="circleToolBtn" class="active" title="圆形橡皮擦">⚪ 圆形</button>
+      <button id="polygonToolBtn" title="多边形套索">🔷 多边形</button>
+    </div>
+
+    <div class="control-group">
+      <span class="control-label">工具大小</span>
+      <input type="range" id="sizeSlider" class="slider" min="10" max="200" value="50">
+      <span id="sizeValue" class="slider-value">50</span>
+    </div>
+
+    <div class="control-group">
+      <span class="control-label">边缘柔和度</span>
+      <input type="range" id="featherSlider" class="slider" min="0" max="100" value="30">
+      <span id="featherValue" class="slider-value">30%</span>
+    </div>
+
+    <span id="status"></span>
+  </div>
+
+  <div class="canvas-container">
+    <canvas id="canvas"></canvas>
+    <div id="info">
+      加载图片开始擦除<br>
+      <strong>圆形模式：</strong>按住鼠标拖拽擦除<br>
+      <strong>多边形模式：</strong>点击创建顶点，双击完成<br>
+      <strong>ESC：</strong>取消当前操作 • <strong>滚轮：</strong>缩放 • <strong>右键：</strong>平移
+    </div>
+  </div>
+
+  <script src="editor.js"></script>
+</body>
+</html>

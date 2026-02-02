@@ -1,0 +1,12 @@
+{
+  "manifest_version": 3,
+  "name": "Corner Marker",
+  "version": "1.0",
+  "permissions": ["tabs"],
+  "action": {
+    "default_title": "Corner Marker"
+  },
+  "background": {
+    "service_worker": "background.js"
+  }
+}
