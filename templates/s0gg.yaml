@@ -4,7 +4,7 @@ images:
   original: s0gg.png
   fg: s0gg_fg.png
 top_left: [1362, 757]
-top_right: [2298, 1010]
-bottom_right: [1451, 2666]
-bottom_left: [30, 1666]
+top_right: [2380, 1035]
+bottom_right: [1432, 2652]
+bottom_left: [98, 1620]
 suitable_rug_size: 5x7

@@ -3,8 +3,8 @@ styles: ['modern']
 images:
   original: no9h.png
   fg: no9h_fg.png
-top_left: [335, 1210]
-top_right: [1262, 1149]
-bottom_right: [3052, 2092]
-bottom_left: [299, 2730]
+top_left: [266, 1112]
+top_right: [1058, 1060]
+bottom_right: [2515, 1803]
+bottom_left: [68, 2330]
 suitable_rug_size: 6x9

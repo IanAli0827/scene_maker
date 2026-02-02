@@ -3,8 +3,8 @@ styles: ['modern']
 images:
   original: pp84.png
   fg: pp84_fg.png
-top_left: [-35, 1488]
-top_right: [597, 1065]
-bottom_right: [1808, 1253]
-bottom_left: [1899, 2009]
+top_left: [-202, 1470]
+top_right: [501, 1044]
+bottom_right: [1766, 1239]
+bottom_left: [1814, 2053]
 suitable_rug_size: 5x7
