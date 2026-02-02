@@ -1,0 +1,10 @@
+room_type: unknown
+styles: ['modern']
+images:
+  original: school-boys-girls_music-theme_kids_bedroom.png
+  fg: school-boys-girls_music-theme_kids_bedroom_fg.png
+top_left: [61, 1179]
+top_right: [1030, 1058]
+bottom_right: [2317, 1650]
+bottom_left: [680, 2218]
+suitable_rug_size: 6x9

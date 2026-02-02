@@ -1,0 +1,10 @@
+room_type: unknown
+styles: ['modern']
+images:
+  original: urban-trekker_scandinavian-kids_toddler_room.png
+  fg: urban-trekker_scandinavian-kids_toddler_room_fg.png
+top_left: [683, 1044]
+top_right: [1384, 1044]
+bottom_right: [1998, 1998]
+bottom_left: [50, 1998]
+suitable_rug_size: 4x6

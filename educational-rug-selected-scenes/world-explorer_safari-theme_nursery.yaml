@@ -1,0 +1,10 @@
+room_type: unknown
+styles: ['modern']
+images:
+  original: world-explorer_safari-theme_nursery.png
+  fg: world-explorer_safari-theme_nursery_fg.png
+top_left: [918, 1148]
+top_right: [1631, 1275]
+bottom_right: [1027, 2246]
+bottom_left: [-161, 1595]
+suitable_rug_size: 4x6

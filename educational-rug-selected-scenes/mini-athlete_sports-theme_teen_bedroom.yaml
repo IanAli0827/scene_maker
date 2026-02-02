@@ -1,0 +1,10 @@
+room_type: unknown
+styles: ['modern']
+images:
+  original: mini-athlete_sports-theme_teen_bedroom.png
+  fg: mini-athlete_sports-theme_teen_bedroom_fg.png
+top_left: [545, 1080]
+top_right: [1397, 1080]
+bottom_right: [2127, 1940]
+bottom_left: [-148, 1940]
+suitable_rug_size: 8x10

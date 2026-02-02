@@ -1,0 +1,10 @@
+room_type: unknown
+styles: ['modern']
+images:
+  original: anime-dreamscape_rainbow-bright_nursery.png
+  fg: anime-dreamscape_rainbow-bright_nursery_fg.png
+top_left: [1035, 1152]
+top_right: [1855, 1225]
+bottom_right: [1933, 2111]
+bottom_left: [70, 1669]
+suitable_rug_size: 8x10

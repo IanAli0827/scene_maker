@@ -1,0 +1,10 @@
+room_type: unknown
+styles: ['modern']
+images:
+  original: cosmic-atronaut_superhero-theme_playroom.png
+  fg: cosmic-atronaut_superhero-theme_playroom_fg.png
+top_left: [1143, 819]
+top_right: [1990, 1021]
+bottom_right: [1081, 2655]
+bottom_left: [-337, 1509]
+suitable_rug_size: 8x10

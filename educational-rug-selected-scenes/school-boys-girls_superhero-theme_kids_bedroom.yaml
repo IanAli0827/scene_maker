@@ -1,0 +1,10 @@
+room_type: unknown
+styles: ['modern']
+images:
+  original: school-boys-girls_superhero-theme_kids_bedroom.png
+  fg: school-boys-girls_superhero-theme_kids_bedroom_fg.png
+top_left: [978, 1043]
+top_right: [1692, 1214]
+bottom_right: [554, 2218]
+bottom_left: [-300, 1372]
+suitable_rug_size: 6x9

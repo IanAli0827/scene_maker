@@ -1,0 +1,10 @@
+room_type: unknown
+styles: ['modern']
+images:
+  original: mini-athlete_art-studio_playroom.png
+  fg: mini-athlete_art-studio_playroom_fg.png
+top_left: [682, 984]
+top_right: [1514, 984]
+bottom_right: [2377, 1854]
+bottom_left: [58, 1854]
+suitable_rug_size: 8x10

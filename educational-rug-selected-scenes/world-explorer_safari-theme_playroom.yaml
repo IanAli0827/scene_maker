@@ -1,0 +1,10 @@
+room_type: unknown
+styles: ['modern']
+images:
+  original: world-explorer_safari-theme_playroom.png
+  fg: world-explorer_safari-theme_playroom_fg.png
+top_left: [588, 1144]
+top_right: [1407, 1144]
+bottom_right: [2173, 2030]
+bottom_left: [-249, 2030]
+suitable_rug_size: 6x9

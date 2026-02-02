@@ -1,0 +1,10 @@
+room_type: unknown
+styles: ['modern']
+images:
+  original: world-explorer_ocean-theme_nursery.png
+  fg: world-explorer_ocean-theme_nursery_fg.png
+top_left: [263, 1176]
+top_right: [976, 930]
+bottom_right: [2216, 1293]
+bottom_left: [1684, 1989]
+suitable_rug_size: 4x6

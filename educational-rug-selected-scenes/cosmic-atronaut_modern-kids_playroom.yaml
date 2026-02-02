@@ -1,0 +1,10 @@
+room_type: unknown
+styles: ['modern']
+images:
+  original: cosmic-atronaut_modern-kids_playroom.png
+  fg: cosmic-atronaut_modern-kids_playroom_fg.png
+top_left: [681, 1054]
+top_right: [1319, 1054]
+bottom_right: [1955, 1740]
+bottom_left: [39, 1740]
+suitable_rug_size: 8x10

@@ -1,0 +1,10 @@
+room_type: unknown
+styles: ['modern']
+images:
+  original: cosmic-atronaut_space-theme_shared_bedroom.png
+  fg: cosmic-atronaut_space-theme_shared_bedroom_fg.png
+top_left: [598, 958]
+top_right: [1428, 958]
+bottom_right: [1885, 1966]
+bottom_left: [66, 1966]
+suitable_rug_size: 6x9
