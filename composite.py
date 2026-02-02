@@ -8,8 +8,9 @@ from rug_renderer import render_rug_image, rgba_to_numpy, numpy_to_rgba, SIZE_CO
 
 SCENE_TEMPLATES_DIR = Path(__file__).parent / "templates"
 
-def load_scene_config(scene_name: str) -> dict:
-    yaml_path = SCENE_TEMPLATES_DIR / f"{scene_name}.yaml"
+def load_scene_config(scene_name: str, scene_dir: Path = None) -> dict:
+    templates_dir = scene_dir if scene_dir else SCENE_TEMPLATES_DIR
+    yaml_path = templates_dir / f"{scene_name}.yaml"
     if not yaml_path.exists():
         raise FileNotFoundError(f"场景配置文件不存在: {yaml_path}")
     with open(yaml_path, encoding="utf-8") as f:
@@ -18,12 +19,12 @@ def load_scene_config(scene_name: str) -> dict:
     images = config.get("images", {})
 
     # 使用 _wf (white floor) 提取阴影
-    wf_path = SCENE_TEMPLATES_DIR / f"{scene_name}_wf.png"
+    wf_path = templates_dir / f"{scene_name}_wf.png"
     if not wf_path.exists():
         print(f"未找到 _wf 版本，将使用原始图片提取阴影: {wf_path}")
-        wf_path = SCENE_TEMPLATES_DIR / images.get("original")
-    image_path = SCENE_TEMPLATES_DIR / images.get("original")
-    fg_path = SCENE_TEMPLATES_DIR / f"{scene_name}_fg.png" if (SCENE_TEMPLATES_DIR / f"{scene_name}_fg.png").exists() else None
+        wf_path = templates_dir / images.get("original")
+    image_path = templates_dir / images.get("original")
+    fg_path = templates_dir / f"{scene_name}_fg.png" if (templates_dir / f"{scene_name}_fg.png").exists() else None
 
     corners = [
         tuple(config["top_left"]),
@@ -195,25 +196,33 @@ def gaussian_blur_edges(rgba: np.ndarray, radius: int = 2, erode: bool = True) -
     result[:, :, 3] = alpha_f
     return result
 
-def composite_scene(scene_name: str, design_path: str = None, output_path: str = "output.png",
+def composite_scene(scene_name: str, design_path: str = None, output_path: str = None,
                     shadow_intensity: float = 1.0, rug_thickness: int = 6, debug: bool = False,
-                    skip_render: bool = False, texture_strength: float = 0.55):
+                    skip_render: bool = False, texture_strength: float = 0.55,
+                    scale_factor: int = 2, scene_dir: Path = None, webp_quality: int = 85):
     """
     Composite a rug into a scene with 2x supersampling for better quality.
 
     Args:
         scene_name: Scene configuration name
         design_path: Path to rug design image (optional, uses red placeholder if not provided)
-        output_path: Output file path
+        output_path: Output file path (default: {scene_name}.webp)
         shadow_intensity: Shadow intensity (0-2)
         rug_thickness: Rug edge thickness in pixels (at final resolution)
         debug: Enable debug output
         skip_render: Skip rug rendering (texture and seam effects)
         texture_strength: Texture effect strength (0-1)
+        scale_factor: Supersampling factor (default: 2)
+        scene_dir: Scene templates directory (default: SCENE_TEMPLATES_DIR)
+        webp_quality: WebP quality (1-100, default: 85)
     """
-    SCALE_FACTOR = 2  # 超采样倍率
+    SCALE_FACTOR = scale_factor  # 超采样倍率
 
-    config = load_scene_config(scene_name)
+    # 默认输出文件名为场景名称
+    if output_path is None:
+        output_path = f"{scene_name}.webp"
+
+    config = load_scene_config(scene_name, scene_dir)
 
     # 保存原始尺寸
     scene_rgb_orig = np.array(Image.open(config["image_path"]).convert("RGB"))
@@ -331,19 +340,77 @@ def composite_scene(scene_name: str, design_path: str = None, output_path: str =
     # 缩小回原始尺寸
     result_orig = cv2.resize(result.astype(np.uint8), (orig_w, orig_h), interpolation=cv2.INTER_AREA)
 
-    Image.fromarray(result_orig).save(output_path)
+    # 保存为 WebP 格式
+    Image.fromarray(result_orig).save(output_path, format='WEBP', quality=webp_quality, method=6)
     print(f"已保存: {output_path}")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Composite a rug into a scene with optional texture rendering")
-    parser.add_argument("scene", help="Scene configuration name")
+    parser.add_argument("scene", help="Scene configuration name (use 'all' to process all templates)")
+    parser.add_argument("--scene-dir", type=lambda x: Path(x), default=None, help=f"Scene templates directory (default: {SCENE_TEMPLATES_DIR})")
     parser.add_argument("--design", required=False, help="Path to rug design image (optional)")
-    parser.add_argument("--output", default="output.png", help="Output file path")
-    parser.add_argument("--shadow-intensity", type=float, default=1.0, help="Shadow intensity (0-2)")
-    parser.add_argument("--thickness", type=int, default=7, help="Rug edge thickness in pixels")
+    parser.add_argument("--output", default=None, help="Output file path (default: {scene_name}.webp)")
+    parser.add_argument("--shadow-intensity", type=float, default=1.6, help="Shadow intensity (0-2)")
+    parser.add_argument("--thickness", type=int, default=6, help="Rug edge thickness in pixels")
     parser.add_argument("--debug", action="store_true", help="Enable debug output")
     parser.add_argument("--skip-render", action="store_true", help="Skip rug texture/seam rendering")
-    parser.add_argument("--texture-strength", type=float, default=0.7, help="Texture effect strength (0-1)")
+    parser.add_argument("--texture-strength", type=float, default=0.65, help="Texture effect strength (0-1)")
+    parser.add_argument("--scale-factor", type=int, default=2, help="Supersampling factor (default: 2)")
+    parser.add_argument("--webp-quality", type=int, default=85, help="WebP quality (1-100, default: 85)")
     args = parser.parse_args()
-    composite_scene(args.scene, args.design, args.output, args.shadow_intensity, args.thickness,
-                    args.debug, args.skip_render, args.texture_strength)
+    
+    # 支持批量处理所有模板
+    if args.scene.lower() == "all":
+        templates_dir = args.scene_dir if args.scene_dir else SCENE_TEMPLATES_DIR
+        yaml_files = list(templates_dir.glob("*.yaml"))
+        
+        if not yaml_files:
+            print(f"错误: 未在 {templates_dir} 中找到任何 .yaml 模板文件")
+            exit(1)
+        
+        print(f"找到 {len(yaml_files)} 个场景模板，开始批量处理...\n")
+        
+        for yaml_file in yaml_files:
+            scene_name = yaml_file.stem
+            print(f"\n{'='*60}")
+            print(f"正在处理场景: {scene_name}")
+            print(f"{'='*60}\n")
+            
+            try:
+                composite_scene(
+                    scene_name, 
+                    args.design, 
+                    None,  # 自动生成输出文件名
+                    args.shadow_intensity, 
+                    args.thickness,
+                    args.debug, 
+                    args.skip_render, 
+                    args.texture_strength, 
+                    args.scale_factor, 
+                    args.scene_dir,
+                    args.webp_quality
+                )
+            except Exception as e:
+                print(f"❌ 处理场景 {scene_name} 时出错: {e}")
+                if args.debug:
+                    import traceback
+                    traceback.print_exc()
+                continue
+        
+        print(f"\n\n{'='*60}")
+        print(f"批量处理完成！共处理 {len(yaml_files)} 个场景")
+        print(f"{'='*60}")
+    else:
+        composite_scene(
+            args.scene, 
+            args.design, 
+            args.output, 
+            args.shadow_intensity, 
+            args.thickness,
+            args.debug, 
+            args.skip_render, 
+            args.texture_strength, 
+            args.scale_factor, 
+            args.scene_dir,
+            args.webp_quality
+        )
