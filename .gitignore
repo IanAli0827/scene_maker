@@ -1,11 +1,6 @@
 .env
 __pycache__/
 
-# 图片文件
-*.png
-*.jpg
-*.jpeg
 *.webp
-*.gif
-*.bmp
-*.tiff
+
+.env
