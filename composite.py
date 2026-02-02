@@ -4,7 +4,7 @@ import cv2
 import numpy as np
 import yaml
 from PIL import Image
-from rug_renderer import render_rug_image, rgba_to_numpy, numpy_to_rgba, SIZE_CONFIGS
+from render import render_rug_image, rgba_to_numpy, SIZE_CONFIGS
 
 SCENE_TEMPLATES_DIR = Path(__file__).parent / "templates"
 

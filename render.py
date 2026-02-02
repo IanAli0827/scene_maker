@@ -440,3 +440,4 @@ def rgba_to_numpy(img: Image.Image) -> np.ndarray:
 def numpy_to_rgba(arr: np.ndarray) -> Image.Image:
     """Convert numpy array to PIL RGBA image."""
     return Image.fromarray(arr.astype(np.uint8), mode="RGBA")
+
