@@ -9,10 +9,9 @@ document.addEventListener('DOMContentLoaded', function() {
   const saveBtn = document.getElementById('saveBtn');
   const autoSaveBtn = document.getElementById('autoSaveBtn');
   const status = document.getElementById('status');
-  
+
   let currentTool = 'circle';
-  
-  // 工具选择
+
   toolButtons.forEach(btn => {
     btn.addEventListener('click', function() {
       toolButtons.forEach(b => b.classList.remove('active'));
@@ -20,28 +19,24 @@ document.addEventListener('DOMContentLoaded', function() {
       currentTool = this.dataset.tool;
     });
   });
-  
-  // 滑块值显示更新
+
   sizeSlider.addEventListener('input', function() {
     sizeValue.textContent = this.value;
   });
-  
+
   featherSlider.addEventListener('input', function() {
     featherValue.textContent = this.value + '%';
   });
-  
-  // 激活按钮
+
   activateBtn.addEventListener('click', async function() {
     try {
       const [tab] = await chrome.tabs.query({active: true, currentWindow: true});
-      
-      // 注入内容脚本
+
       await chrome.scripting.executeScript({
         target: {tabId: tab.id},
         files: ['content.js']
       });
-      
-      // 发送配置到内容脚本
+
       await chrome.tabs.sendMessage(tab.id, {
         action: 'init',
         tool: currentTool,
@@ -51,15 +46,13 @@ document.addEventListener('DOMContentLoaded', function() {
       
       status.textContent = '工具已激活！请在页面上操作图像';
       status.className = 'status success';
-      
+
     } catch (error) {
-      console.error('激活失败:', error);
       status.textContent = '激活失败，请确保在正确的页面';
       status.className = 'status info';
     }
   });
-  
-  // 重置按钮
+
   resetBtn.addEventListener('click', async function() {
     try {
       const [tab] = await chrome.tabs.query({active: true, currentWindow: true});
@@ -67,11 +60,9 @@ document.addEventListener('DOMContentLoaded', function() {
       status.textContent = '已重置工具';
       status.className = 'status info';
     } catch (error) {
-      // 忽略错误
     }
   });
-  
-  // 保存按钮
+
   saveBtn.addEventListener('click', async function() {
     try {
       const [tab] = await chrome.tabs.query({active: true, currentWindow: true});
@@ -83,8 +74,7 @@ document.addEventListener('DOMContentLoaded', function() {
       status.className = 'status info';
     }
   });
-  
-  // 自动保存按钮
+
   autoSaveBtn.addEventListener('click', async function() {
     try {
       const [tab] = await chrome.tabs.query({active: true, currentWindow: true});

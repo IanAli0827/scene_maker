@@ -19,12 +19,12 @@ class EraserTool {
     this.panning = false;
     this.panStartX = 0;
     this.panStartY = 0;
-    
+
     this.currentFileName = null;
     this.currentFileHandle = null;
     this.statusTimeout = null;
-    this.mouseX = null; // 鼠标X坐标
-    this.mouseY = null; // 鼠标Y坐标
+    this.mouseX = null;
+    this.mouseY = null;
 
     this.statusEl = document.getElementById('status');
     this.infoEl = document.getElementById('info');
@@ -113,8 +113,7 @@ class EraserTool {
     if (!file) return;
 
     this.currentFileName = file.name;
-    
-    // 尝试获取文件句柄用于保存
+
     try {
       const [fileHandle] = await window.showOpenFilePicker({
         types: [{ description: 'Images', accept: { 'image/*': ['.png', '.jpg', '.jpeg'] } }],
@@ -131,10 +130,9 @@ class EraserTool {
       this.img.onload = () => {
         this.history = [];
         this.polygonPoints = [];
-        
+
         this.showStatus(`已加载 ${this.currentFileName}`);
-        
-        // 适应视图
+
         this.scale = Math.min(
           (this.canvas.width - 100) / this.img.width,
           (this.canvas.height - 100) / this.img.height,
@@ -272,15 +270,13 @@ class EraserTool {
     const data = imageData.data;
 
     const radius = this.brushSize / this.scale;
-    const softness = this.featherAmount; // 0-1, 柔边程度
+    const softness = this.featherAmount;
 
-    // 计算影响范围
     const minX = Math.max(0, Math.floor(centerX - radius));
     const maxX = Math.min(tempCanvas.width, Math.ceil(centerX + radius));
     const minY = Math.max(0, Math.floor(centerY - radius));
     const maxY = Math.min(tempCanvas.height, Math.ceil(centerY + radius));
 
-    // 遍历圆形区域内的像素
     for (let y = minY; y < maxY; y++) {
       for (let x = minX; x < maxX; x++) {
         const dx = x - centerX;
@@ -290,20 +286,16 @@ class EraserTool {
         if (distance <= radius) {
           const pixelIndex = (y * tempCanvas.width + x) * 4;
 
-          // 计算柔边效果：从中心到边缘的平滑过渡
           let alpha = 1.0;
 
           if (softness > 0) {
-            // 柔边区域从 (1-softness)*radius 到 radius
             const softStart = radius * (1 - softness);
             if (distance > softStart) {
-              // 使用平滑的余弦插值创建柔边效果
               const t = (distance - softStart) / (radius - softStart);
-              alpha = Math.cos(t * Math.PI / 2); // 从1到0的平滑过渡
+              alpha = Math.cos(t * Math.PI / 2);
             }
           }
 
-          // 擦除：减少 alpha 通道
           data[pixelIndex + 3] *= (1 - alpha);
         }
       }
@@ -332,39 +324,32 @@ class EraserTool {
     const data = imageData.data;
 
     const points = this.polygonPoints;
-    const softness = this.featherAmount; // 0-1, 边缘柔和度
-    const softDistance = 20 * softness; // 柔边距离（像素）
+    const softness = this.featherAmount;
+    const softDistance = 20 * softness;
 
-    // 计算边界框
     const minX = Math.max(0, Math.floor(Math.min(...points.map(p => p.x)) - softDistance - 5));
     const maxX = Math.min(tempCanvas.width, Math.ceil(Math.max(...points.map(p => p.x)) + softDistance + 5));
     const minY = Math.max(0, Math.floor(Math.min(...points.map(p => p.y)) - softDistance - 5));
     const maxY = Math.min(tempCanvas.height, Math.ceil(Math.max(...points.map(p => p.y)) + softDistance + 5));
 
-    // 遍历边界框内的像素
     for (let y = minY; y < maxY; y++) {
       for (let x = minX; x < maxX; x++) {
         const pixelIndex = (y * tempCanvas.width + x) * 4;
 
-        // 检查点是否在多边形内
         const isInside = this.pointInPolygon(x, y, points);
 
         if (isInside) {
-          // 在多边形内部，计算到边缘的距离
           let alpha = 1.0;
 
           if (softness > 0) {
-            // 计算到多边形边缘的最短距离
             const distToEdge = this.distanceToPolygonEdge(x, y, points);
 
             if (distToEdge < softDistance) {
-              // 使用平滑的余弦插值创建柔边效果
               const t = distToEdge / softDistance;
-              alpha = 1 - Math.cos(t * Math.PI / 2); // 从0到1的平滑过渡
+              alpha = 1 - Math.cos(t * Math.PI / 2);
             }
           }
 
-          // 擦除：减少 alpha 通道
           data[pixelIndex + 3] *= (1 - alpha);
         }
       }
@@ -451,10 +436,8 @@ class EraserTool {
       tempCtx.drawImage(this.img, 0, 0);
 
       const blob = await new Promise(resolve => tempCanvas.toBlob(resolve, 'image/png'));
-      
-      // 生成默认文件名（使用加载的文件路径）
+
       let suggestedName = this.currentFileName || 'erased.png';
-      
       const fileHandle = await window.showSaveFilePicker({
         suggestedName: suggestedName,
         types: [{
@@ -466,11 +449,10 @@ class EraserTool {
       const writable = await fileHandle.createWritable();
       await writable.write(blob);
       await writable.close();
-      
+
       this.showStatus(`✓ 已保存到 ${fileHandle.name}`);
     } catch (err) {
       if (err.name !== 'AbortError') {
-        console.error('保存失败:', err);
         this.showStatus('保存失败: ' + err.message);
       }
     }
@@ -511,10 +493,8 @@ class EraserTool {
     ctx.translate(this.offsetX, this.offsetY);
     ctx.scale(this.scale, this.scale);
 
-    // 绘制图片
     ctx.drawImage(this.img, 0, 0);
 
-    // 绘制多边形点
     if (this.currentTool === 'polygon' && this.polygonPoints.length > 0) {
       ctx.strokeStyle = '#9B8CBA';
       ctx.lineWidth = 2 / this.scale;
@@ -536,25 +516,21 @@ class EraserTool {
       });
     }
 
-    // 绘制鼠标预览圆圈（圆形工具）
     if (this.currentTool === 'circle' && this.mouseX !== null && this.mouseY !== null && !this.panning) {
       const radius = this.brushSize / this.scale;
 
-      // 外圈（白色）
       ctx.beginPath();
       ctx.arc(this.mouseX, this.mouseY, radius, 0, Math.PI * 2);
       ctx.strokeStyle = 'white';
       ctx.lineWidth = 2 / this.scale;
       ctx.stroke();
 
-      // 内圈（黑色）
       ctx.beginPath();
       ctx.arc(this.mouseX, this.mouseY, radius, 0, Math.PI * 2);
       ctx.strokeStyle = 'black';
       ctx.lineWidth = 1 / this.scale;
       ctx.stroke();
 
-      // 如果有柔边，显示柔边范围
       if (this.featherAmount > 0) {
         const softStart = radius * (1 - this.featherAmount);
         ctx.beginPath();
@@ -569,7 +545,6 @@ class EraserTool {
 
     ctx.restore();
 
-    // 绘制右下角工具预览
     this.drawToolPreview();
   }
 
@@ -580,27 +555,23 @@ class EraserTool {
     const x = this.canvas.width - previewSize - margin;
     const y = this.canvas.height - previewSize - margin;
 
-    // 背景
     ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
     ctx.fillRect(x, y, previewSize, previewSize);
     ctx.strokeStyle = '#444';
     ctx.lineWidth = 1;
     ctx.strokeRect(x, y, previewSize, previewSize);
 
-    // 绘制工具预览
     const centerX = x + previewSize / 2;
     const centerY = y + previewSize / 2;
     const previewRadius = Math.min(30, this.brushSize * 0.5);
 
     if (this.currentTool === 'circle') {
-      // 圆形工具预览
       ctx.beginPath();
       ctx.arc(centerX, centerY, previewRadius, 0, Math.PI * 2);
       ctx.strokeStyle = 'white';
       ctx.lineWidth = 2;
       ctx.stroke();
 
-      // 柔边指示
       if (this.featherAmount > 0) {
         const softStart = previewRadius * (1 - this.featherAmount);
         ctx.beginPath();
@@ -612,13 +583,11 @@ class EraserTool {
         ctx.setLineDash([]);
       }
 
-      // 显示大小
       ctx.fillStyle = 'white';
       ctx.font = '10px Arial';
       ctx.textAlign = 'center';
       ctx.fillText(`${this.brushSize}px`, centerX, y + previewSize - 5);
     } else {
-      // 多边形工具预览
       ctx.fillStyle = 'white';
       ctx.font = '12px Arial';
       ctx.textAlign = 'center';
@@ -628,10 +597,7 @@ class EraserTool {
   }
 }
 
-// 初始化
 const eraserTool = new EraserTool();
-
-// 添加点击事件（用于多边形工具）
 const canvas = document.getElementById('canvas');
 canvas.addEventListener('click', function(e) {
   if (eraserTool.currentTool === 'polygon' && eraserTool.img && !eraserTool.panning) {

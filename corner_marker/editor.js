@@ -16,12 +16,12 @@ class CornerMarker {
     this.statusTimeout = null;
     this.hoverRadius = 20;
     this.outputFileHandle = null;
-    this.outputFormat = 'yaml'; // 默认使用 yaml 格式
-    this.originalYamlContent = null; // 保存原始 yaml 内容
-    this.selectedRugSize = '8x10'; // 默认地毯尺寸
-    this.imageFileHandle = null; // 保存图片文件句柄
-    this.directoryHandle = null; // 保存目录句柄
-    this.dashOffset = 0; // 虚线动画偏移
+    this.outputFormat = 'yaml';
+    this.originalYamlContent = null;
+    this.selectedRugSize = '8x10';
+    this.imageFileHandle = null;
+    this.directoryHandle = null;
+    this.dashOffset = 0;
 
     this.coordInputs = document.querySelectorAll('.coord-input');
     this.statusEl = document.getElementById('status');
@@ -35,7 +35,6 @@ class CornerMarker {
     this.resizeCanvas();
     window.addEventListener('resize', () => this.resizeCanvas());
 
-    // 启动虚线动画
     this.startDashAnimation();
   }
 
@@ -118,7 +117,6 @@ class CornerMarker {
 
   async loadImageWithPicker() {
     try {
-      // 使用 File System Access API 选择图片文件
       const [fileHandle] = await window.showOpenFilePicker({
         types: [
           {
@@ -134,17 +132,14 @@ class CornerMarker {
       this.outputFileHandle = null;
       this.originalYamlContent = null;
 
-      // 读取图片文件
       const file = await fileHandle.getFile();
       const reader = new FileReader();
 
       reader.onload = async () => {
         this.img = new Image();
         this.img.onload = async () => {
-          // 尝试加载同名 yaml 文件
           await this.tryLoadYamlPoints();
 
-          // 如果没有加载到点位，使用默认位置
           if (this.points.length !== 4) {
             const margin = 50;
             this.points = [
@@ -157,7 +152,6 @@ class CornerMarker {
 
           this.showStatus(`已加载 ${this.currentSceneName}`);
 
-          // 适应视图
           this.scale = Math.min(
             (this.canvas.width - 100) / this.img.width,
             (this.canvas.height - 100) / this.img.height,
@@ -176,7 +170,6 @@ class CornerMarker {
       reader.readAsDataURL(file);
     } catch (err) {
       if (err.name !== 'AbortError') {
-        console.error('加载图片失败:', err);
         this.showStatus('加载图片失败');
       }
     }
@@ -196,13 +189,9 @@ class CornerMarker {
     reader.onload = async () => {
       this.img = new Image();
       this.img.onload = async () => {
-        // 尝试通过 File System Access API 获取文件句柄和目录
         await this.tryGetFileHandles();
-
-        // 尝试加载同名 yaml 文件中的点位
         await this.tryLoadYamlPoints();
 
-        // 如果没有加载到点位，使用默认位置
         if (this.points.length !== 4) {
           const margin = 50;
           this.points = [
@@ -214,7 +203,6 @@ class CornerMarker {
         }
         this.showStatus(`已加载 ${this.currentSceneName}`);
 
-        // 适应视图
         this.scale = Math.min(
           (this.canvas.width - 100) / this.img.width,
           (this.canvas.height - 100) / this.img.height,
@@ -234,7 +222,6 @@ class CornerMarker {
 
   async tryGetFileHandles() {
     try {
-      // 尝试获取文件句柄（需要用户授权）
       const [fileHandle] = await window.showOpenFilePicker({
         types: [
           {
@@ -247,8 +234,6 @@ class CornerMarker {
 
       this.imageFileHandle = fileHandle;
 
-      // 尝试获取父目录句柄
-      // 注意：这需要用户授权目录访问
       const dirHandle = await window.showDirectoryPicker({
         mode: 'readwrite'
       });
@@ -256,30 +241,25 @@ class CornerMarker {
       this.directoryHandle = dirHandle;
       this.showStatus('✓ 已获取目录访问权限');
     } catch (err) {
-      // 用户取消或不支持，继续使用普通文件选择
-      console.log('未获取文件句柄:', err.message);
+      // 用户取消，继续使用普通文件选择
     }
   }
 
   async tryLoadYamlPoints() {
     if (!this.imageFileHandle) {
-      console.log('没有图片文件句柄，无法自动加载 YAML');
       return;
     }
 
     try {
-      // 获取图片文件的基础名称（不含扩展名）
       const baseName = this.currentSceneName.replace(/\.[^.]+$/, '');
       const yamlFileName = baseName + '.yaml';
 
-      // 请求用户选择包含图片的目录（只需要一次）
       if (!this.directoryHandle) {
         this.directoryHandle = await window.showDirectoryPicker({
           mode: 'readwrite'
         });
       }
 
-      // 尝试从目录中获取同名 YAML 文件
       try {
         const yamlFileHandle = await this.directoryHandle.getFileHandle(yamlFileName);
         this.outputFileHandle = yamlFileHandle;
@@ -287,10 +267,8 @@ class CornerMarker {
         const file = await yamlFileHandle.getFile();
         const text = await file.text();
 
-        // 保存原始 yaml 内容
         this.originalYamlContent = text;
 
-        // 解析 YAML（简单解析，只提取四个角点）
         const topLeft = this.parseYamlArray(text, 'top_left');
         const topRight = this.parseYamlArray(text, 'top_right');
         const bottomRight = this.parseYamlArray(text, 'bottom_right');
@@ -306,19 +284,16 @@ class CornerMarker {
           this.showStatus(`✓ 已从 ${yamlFileName} 加载点位`);
         }
 
-        // 加载 suitable_rug_size
         const sizeMatch = text.match(/suitable_rug_size:\s*([\dx]+)/);
         if (sizeMatch) {
           this.selectedRugSize = sizeMatch[1];
           document.getElementById('sizeSelect').value = this.selectedRugSize;
         }
       } catch (err) {
-        // YAML 文件不存在，这是正常的
-        console.log(`未找到 ${yamlFileName}，将使用默认点位`);
+        // YAML 文件不存在
       }
     } catch (err) {
-      // 用户取消目录选择或其他错误
-      console.log('未加载 yaml 点位:', err.message);
+      // 用户取消目录选择
       this.originalYamlContent = null;
       this.outputFileHandle = null;
       this.directoryHandle = null;
@@ -326,7 +301,6 @@ class CornerMarker {
   }
 
   parseYamlArray(text, key) {
-    // 简单的 YAML 数组解析：匹配 "key: [x, y]" 格式
     const regex = new RegExp(`${key}:\\s*\\[\\s*(\\d+)\\s*,\\s*(\\d+)\\s*\\]`);
     const match = text.match(regex);
     if (match) {
@@ -345,13 +319,11 @@ class CornerMarker {
       return;
     }
 
-    // 如果没有指定输出文件，直接保存为同名 yaml
     if (!this.outputFileHandle) {
       await this.saveAsYaml();
       return;
     }
 
-    // 根据输出格式保存
     if (this.outputFormat === 'yaml') {
       await this.saveAsYaml();
     } else {
@@ -364,14 +336,11 @@ class CornerMarker {
     const yamlFileName = baseName + '.yaml';
     const yamlContent = this.generateYamlContent();
 
-    // 如果有目录句柄，尝试保存到同目录
     if (this.directoryHandle) {
       try {
-        // 获取或创建 YAML 文件
         const yamlFileHandle = await this.directoryHandle.getFileHandle(yamlFileName, { create: true });
         this.outputFileHandle = yamlFileHandle;
 
-        // 写入内容
         const writable = await yamlFileHandle.createWritable();
         await writable.write(yamlContent);
         await writable.close();
@@ -380,12 +349,10 @@ class CornerMarker {
         this.showStatus(`✓ 已保存到 ${yamlFileName}`);
         return;
       } catch (err) {
-        console.error('保存到目录失败:', err);
-        // 如果失败，继续使用下载方式
+        // 保存失败，使用下载方式
       }
     }
 
-    // 如果没有目录句柄或保存失败，使用下载方式
     const blob = new Blob([yamlContent], { type: 'text/yaml' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -399,11 +366,9 @@ class CornerMarker {
   generateYamlContent() {
     const p = this.points.map(pt => [Math.round(pt.x), Math.round(pt.y)]);
 
-    // 如果有原始 yaml 内容，只更新角点坐标和尺寸
     if (this.originalYamlContent) {
       let content = this.originalYamlContent;
 
-      // 更新四个角点（使用正则表达式替换）
       content = content.replace(
         /top_left:\s*\[.*?\]/,
         `top_left: [${p[0][0]}, ${p[0][1]}]`
@@ -420,8 +385,7 @@ class CornerMarker {
         /bottom_left:\s*\[.*?\]/,
         `bottom_left: [${p[3][0]}, ${p[3][1]}]`
       );
-      
-      // 更新 suitable_rug_size
+
       content = content.replace(
         /suitable_rug_size:\s*[\dx]+/,
         `suitable_rug_size: ${this.selectedRugSize}`
@@ -430,7 +394,6 @@ class CornerMarker {
       return content;
     }
 
-    // 如果没有原始内容，生成新的 YAML
     return `room_type: unknown
 styles: ['modern']
 images:
@@ -451,7 +414,6 @@ suitable_rug_size: ${this.selectedRugSize}
     };
     const line = JSON.stringify(entry) + '\n';
 
-    // 如果没有指定输出文件，使用下载方式
     if (!this.outputFileHandle) {
       const blob = new Blob([line], { type: 'application/jsonl' });
       const url = URL.createObjectURL(blob);
@@ -464,24 +426,19 @@ suitable_rug_size: ${this.selectedRugSize}
       return;
     }
 
-    // 追加到指定文件
     try {
-      // 先读取现有内容
       let existingContent = '';
       try {
         const existingFile = await this.outputFileHandle.getFile();
         existingContent = await existingFile.text();
       } catch {
-        // 文件不存在或为空，忽略
       }
 
-      // 追加新内容并写入
       const writable = await this.outputFileHandle.createWritable();
       await writable.write(existingContent + line);
       await writable.close();
       this.showStatus(`✓ 已保存到 ${this.outputFileHandle.name}`);
     } catch (err) {
-      console.error('保存失败:', err);
       this.showStatus('保存失败: ' + err.message);
     }
   }
@@ -518,14 +475,11 @@ suitable_rug_size: ${this.selectedRugSize}
     ctx.translate(this.offsetX, this.offsetY);
     ctx.scale(this.scale, this.scale);
 
-    // 绘制图片
     ctx.drawImage(this.img, 0, 0);
 
-    // 绘制连接线（黑白蚂蚁线动画）
     if (this.points.length === 4) {
       ctx.save();
 
-      // 先绘制白色虚线
       ctx.beginPath();
       ctx.moveTo(this.points[0].x, this.points[0].y);
       for (let i = 1; i < 4; i++) {
@@ -538,7 +492,6 @@ suitable_rug_size: ${this.selectedRugSize}
       ctx.lineDashOffset = this.dashOffset / this.scale;
       ctx.stroke();
 
-      // 再绘制黑色虚线（偏移）
       ctx.beginPath();
       ctx.moveTo(this.points[0].x, this.points[0].y);
       for (let i = 1; i < 4; i++) {
@@ -554,11 +507,9 @@ suitable_rug_size: ${this.selectedRugSize}
       ctx.restore();
     }
 
-    // 绘制角点和数字标签
-    const labels = ['TL', 'TR', 'BR', 'BL']; // 角点标签
+    const labels = ['TL', 'TR', 'BR', 'BL'];
 
     this.points.forEach((point, i) => {
-      // 绘制小圆点标记角点位置
       ctx.beginPath();
       ctx.arc(point.x, point.y, 4 / this.scale, 0, Math.PI * 2);
       ctx.fillStyle = 'white';
@@ -567,26 +518,23 @@ suitable_rug_size: ${this.selectedRugSize}
       ctx.lineWidth = 1 / this.scale;
       ctx.stroke();
 
-      // 计算标签位置（在角点外侧）
       const textOffset = 20 / this.scale;
       let textOffsetX = 0, textOffsetY = 0;
 
-      // 根据角点位置调整标签偏移
-      if (i === 0) { // 左上
+      if (i === 0) {
         textOffsetX = -textOffset;
         textOffsetY = -textOffset;
-      } else if (i === 1) { // 右上
+      } else if (i === 1) {
         textOffsetX = textOffset;
         textOffsetY = -textOffset;
-      } else if (i === 2) { // 右下
+      } else if (i === 2) {
         textOffsetX = textOffset;
         textOffsetY = textOffset;
-      } else { // 左下
+      } else {
         textOffsetX = -textOffset;
         textOffsetY = textOffset;
       }
 
-      // 绘制标签文字（白色文字+黑色描边）
       ctx.font = `bold ${14 / this.scale}px Arial`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
@@ -594,18 +542,18 @@ suitable_rug_size: ${this.selectedRugSize}
       const textX = point.x + textOffsetX;
       const textY = point.y + textOffsetY;
 
-      // 黑色描边
       ctx.strokeStyle = 'black';
       ctx.lineWidth = 3 / this.scale;
       ctx.strokeText(labels[i], textX, textY);
 
-      // 白色填充
       ctx.fillStyle = 'white';
       ctx.fillText(labels[i], textX, textY);
     });
 
     ctx.restore();
   }
+
+new CornerMarker();
 
   getMousePos(e) {
     const rect = this.canvas.getBoundingClientRect();
