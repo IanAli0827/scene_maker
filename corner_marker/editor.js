@@ -553,8 +553,6 @@ suitable_rug_size: ${this.selectedRugSize}
     ctx.restore();
   }
 
-new CornerMarker();
-
   getMousePos(e) {
     const rect = this.canvas.getBoundingClientRect();
     return {
