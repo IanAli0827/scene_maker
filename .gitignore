@@ -1,6 +1,19 @@
 .env
+.venv/
+venv/
+env/
+.python-version
+
 __pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
 
 *.webp
+*.log
+*.tmp
 
-.env
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
