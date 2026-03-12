@@ -1,12 +1,16 @@
 import argparse
+from dataclasses import dataclass
 from pathlib import Path
+from typing import Optional
+
 import cv2
 import numpy as np
 import yaml
 from PIL import Image
-from render import render_rug_image, rgba_to_numpy, SIZE_CONFIGS
+from render import DEFAULT_SIZE, SIZE_CONFIGS, render_design
 
 SCENE_TEMPLATES_DIR = Path(__file__).parent / "templates"
+THICKNESS = 6
 
 def load_scene_config(scene_name: str, scene_dir: Path = None) -> dict:
     templates_dir = scene_dir if scene_dir else SCENE_TEMPLATES_DIR
@@ -45,6 +49,58 @@ def load_scene_config(scene_name: str, scene_dir: Path = None) -> dict:
         "config": config,
     }
 
+
+def load_template_images(template: dict) -> dict[str, Optional[np.ndarray]]:
+    with Image.open(template["image_path"]) as img:
+        scene_rgb = np.array(img.convert("RGB"))
+
+    wf_path = template.get("wf_path")
+    if wf_path:
+        with Image.open(wf_path) as img:
+            shadow_ref_rgb = np.array(img.convert("RGB"))
+    else:
+        shadow_ref_rgb = None
+
+    fg = None
+    if template.get("fg_path"):
+        with Image.open(template["fg_path"]) as img:
+            fg = np.array(img.convert("RGBA"))
+
+    return {
+        "scene": scene_rgb,
+        "shadow": shadow_ref_rgb,
+        "fg": fg,
+    }
+
+
+@dataclass
+class SceneAssets:
+    scene_rgb: np.ndarray
+    shadow_ref: Optional[np.ndarray]
+    fg_processed: Optional[np.ndarray]
+
+
+def prepare_scene_assets(template_imgs: dict[str, Optional[np.ndarray]]) -> SceneAssets:
+    scene_rgb = template_imgs.get("scene")
+    if scene_rgb is None:
+        raise ValueError("Invalid template images: missing scene layer")
+
+    orig_h, orig_w = scene_rgb.shape[:2]
+    shadow_ref = template_imgs.get("shadow")
+    if shadow_ref is not None and shadow_ref.shape[:2] != (orig_h, orig_w):
+        shadow_ref = cv2.resize(shadow_ref, (orig_w, orig_h), interpolation=cv2.INTER_LINEAR)
+
+    fg_processed = None
+    fg = template_imgs.get("fg")
+    if fg is not None:
+        fg_work = fg
+        if fg_work.shape[:2] != (orig_h, orig_w):
+            print(f"自动调整 fg 图尺寸: {fg_work.shape[1]}x{fg_work.shape[0]} -> {orig_w}x{orig_h}")
+            fg_work = cv2.resize(fg_work, (orig_w, orig_h), interpolation=cv2.INTER_LINEAR)
+        fg_processed = gaussian_blur_edges(fg_work, radius=2, erode=False)
+
+    return SceneAssets(scene_rgb=scene_rgb, shadow_ref=shadow_ref, fg_processed=fg_processed)
+
 def get_visible_edges(points: list[tuple[int, int]]) -> list[dict]:
     pts = np.array(points, dtype=np.float32)
     centroid = np.mean(pts, axis=0)
@@ -77,47 +133,37 @@ def get_visible_edges(points: list[tuple[int, int]]) -> list[dict]:
     print(f"共找到 {len(visible_edges)} 条可见边\n")
     return visible_edges
 
-def add_thickness_to_visible_edges(rug_rgba: np.ndarray, dst_points: list[tuple[int, int]], thickness: int = 6) -> np.ndarray:
-    result = rug_rgba.copy()
-    h, w = result.shape[:2]
-    alpha = result[:, :, 3]
+def add_thickness_to_visible_edges(rug_rgba: np.ndarray, dst_points: list[tuple[int, int]], scale_factor: int = 1) -> np.ndarray:
+    h, w = rug_rgba.shape[:2]
+    alpha = rug_rgba[:, :, 3].copy()
     visible_edges = get_visible_edges(dst_points)
 
     if len(visible_edges) == 0:
         print("⚠️  没有检测到可见边，跳过厚度条添加")
-        return result
+        return rug_rgba
 
     print(f"开始为 {len(visible_edges)} 条可见边添加厚度条...")
 
-    min_thickness = 4
-    max_thickness = thickness
-    img_bottom = h
-
-    # 厚度方向：垂直向下（图片坐标系的Y轴正方向）
+    thickness = THICKNESS * scale_factor
     thickness_direction = np.array([0, 1], dtype=np.float32)
 
-    # 厚度条颜色：上米白，下黑
-    top_color = np.array([255, 250, 230], dtype=np.float32)  # 米黄色
-    bottom_color = np.array([20, 20, 20], dtype=np.float32)  # 深灰色（接近黑色）
+    top_color = np.array([255, 250, 230], dtype=np.float32)
+    bottom_color = np.array([20, 20, 20], dtype=np.float32)
 
     for edge in visible_edges:
         start, end = edge["start"], edge["end"]
         edge_len = np.linalg.norm(end - start)
         num_samples = int(edge_len) + 1
+        offset = thickness_direction * max(1, thickness - 2)
+        next_offset = offset
 
         for i in range(num_samples):
             t = i / max(1, num_samples - 1)
             point = start + t * (end - start)
-            depth_ratio = point[1] / img_bottom
-            local_thickness = min_thickness + (max_thickness - min_thickness) * depth_ratio
-            offset = thickness_direction * local_thickness
 
             if i < num_samples - 1:
                 next_t = (i + 1) / max(1, num_samples - 1)
                 next_point = start + next_t * (end - start)
-                next_depth_ratio = next_point[1] / img_bottom
-                next_thickness = min_thickness + (max_thickness - min_thickness) * next_depth_ratio
-                next_offset = thickness_direction * next_thickness
                 poly = np.array([point, next_point, next_point + next_offset, point + offset], dtype=np.int32)
             else:
                 poly = np.array([point, point, point + offset, point + offset], dtype=np.int32)
@@ -128,25 +174,17 @@ def add_thickness_to_visible_edges(rug_rgba: np.ndarray, dst_points: list[tuple[
 
             mask_roi = np.zeros((y_max - y_min + 1, x_max - x_min + 1), dtype=np.uint8)
             cv2.fillConvexPoly(mask_roi, (poly - [x_min, y_min]), 255)
-            mask_roi = cv2.GaussianBlur(mask_roi, (1, 1), 0)
 
             roi_h, roi_w = mask_roi.shape
             soft_mask = mask_roi.astype(np.float32) / 255.0
 
-            # 创建渐变颜色图
             gradient_map = np.zeros((roi_h, roi_w, 3), dtype=np.float32)
 
-            # 对每个像素，根据其在厚度条中的相对位置计算颜色
             for y in range(roi_h):
                 global_y = y + y_min
-                # 计算该行在厚度条中的相对位置（0=顶边，1=底边）
-                # 找到该像素对应的边上的点
                 edge_progress = (global_y - point[1]) / max(0.1, offset[1]) if offset[1] > 0 else 0
                 edge_progress = np.clip(edge_progress, 0, 1)
-
-                # 根据相对位置插值颜色（0=米白，1=黑色）
-                lerp_factor = edge_progress
-                pixel_color = top_color * (1 - lerp_factor) + bottom_color * lerp_factor
+                pixel_color = top_color * (1 - edge_progress) + bottom_color * edge_progress
                 gradient_map[y, :] = pixel_color
 
             alpha_roi = alpha[y_min : y_max + 1, x_min : x_max + 1]
@@ -154,17 +192,18 @@ def add_thickness_to_visible_edges(rug_rgba: np.ndarray, dst_points: list[tuple[
             thickness_weight = soft_mask * (1.0 - rug_alpha_f)
 
             for c in range(3):
-                roi_c = result[y_min : y_max + 1, x_min : x_max + 1, c].astype(np.float32)
+                roi_c = rug_rgba[y_min : y_max + 1, x_min : x_max + 1, c].astype(np.float32)
                 gradient_c = gradient_map[:, :, c]
 
-                result[y_min : y_max + 1, x_min : x_max + 1, c] = (
+                rug_rgba[y_min : y_max + 1, x_min : x_max + 1, c] = (
                     roi_c * (1.0 - thickness_weight) + gradient_c * thickness_weight
                 ).astype(np.uint8)
 
             alpha[y_min : y_max + 1, x_min : x_max + 1] = (np.maximum(rug_alpha_f, soft_mask) * 255).astype(np.uint8)
 
+    rug_rgba[:, :, 3] = alpha
     print(f"✓ 厚度条添加完成\n")
-    return result
+    return rug_rgba
 
 def apply_lighting(rug_rgba: np.ndarray, shadow_ref_rgb: np.ndarray, intensity: float = 1.0) -> np.ndarray:
     gray = cv2.cvtColor(shadow_ref_rgb, cv2.COLOR_RGB2GRAY).astype(np.float32) / 255.0
@@ -196,8 +235,61 @@ def gaussian_blur_edges(rgba: np.ndarray, radius: int = 2, erode: bool = True) -
     result[:, :, 3] = alpha_f
     return result
 
+
+def composite_rendered_to_scene(
+    rendered_design_image: Image.Image,
+    *,
+    template: dict,
+    assets: SceneAssets,
+    shadow_intensity: float = 1.6,
+    scale_factor: int = 1,
+) -> Image.Image:
+    scene_rgb = assets.scene_rgb
+    shadow_ref = assets.shadow_ref
+    fg_processed = assets.fg_processed
+    orig_h, orig_w = scene_rgb.shape[:2]
+    h, w = orig_h * scale_factor, orig_w * scale_factor
+    scaled_corners = [(int(x * scale_factor), int(y * scale_factor)) for x, y in template["corners"]]
+
+    if rendered_design_image.mode == "RGBA":
+        rug_rgba = np.array(rendered_design_image)
+    else:
+        rug_rgba = np.array(rendered_design_image.convert("RGBA"))
+
+    rug_rgb = rug_rgba[:, :, :3]
+    rug_alpha = rug_rgba[:, :, 3]
+    src_pts = np.float32([(0, 0), (rug_rgb.shape[1], 0), (rug_rgb.shape[1], rug_rgb.shape[0]), (0, rug_rgb.shape[0])])
+    dst_pts = np.float32(scaled_corners)
+    matrix = cv2.getPerspectiveTransform(src_pts, dst_pts)
+
+    warped_rgb = cv2.warpPerspective(rug_rgb, matrix, (w, h), flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_REPLICATE)
+    warped_alpha = cv2.warpPerspective(rug_alpha, matrix, (w, h), flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_CONSTANT, borderValue=0)
+    warped_rug = np.dstack([warped_rgb, warped_alpha])
+
+    warped_rug = add_thickness_to_visible_edges(warped_rug, scaled_corners, scale_factor)
+    warped_rug_down = cv2.resize(warped_rug, (orig_w, orig_h), interpolation=cv2.INTER_LINEAR)
+
+    if shadow_ref is not None:
+        warped_rug_down = apply_lighting(warped_rug_down, shadow_ref, shadow_intensity)
+
+    warped_rug_down = gaussian_blur_edges(warped_rug_down, radius=1, erode=False)
+    result = scene_rgb.astype(np.float32)
+    alpha = warped_rug_down[:, :, 3].astype(np.float32) / 255.0
+    warp_rgb = warped_rug_down[:, :, :3].astype(np.float32)
+    for c in range(3):
+        result[:, :, c] = result[:, :, c] * (1.0 - alpha) + warp_rgb[:, :, c] * alpha
+
+    if fg_processed is not None:
+        fg_a = fg_processed[:, :, 3].astype(np.float32) / 255.0
+        fg_rgb = fg_processed[:, :, :3].astype(np.float32)
+        for c in range(3):
+            result[:, :, c] = result[:, :, c] * (1.0 - fg_a) + fg_rgb[:, :, c] * fg_a
+
+    return Image.fromarray(result.astype(np.uint8))
+
+
 def composite_scene(scene_name: str, design_path: str = None, output_path: str = None,
-                    shadow_intensity: float = 1.0, rug_thickness: int = 6, debug: bool = False,
+                    shadow_intensity: float = 1.6, rug_thickness: int = 6, debug: bool = False,
                     skip_render: bool = False, texture_strength: float = 0.55,
                     scale_factor: int = 2, scene_dir: Path = None, webp_quality: int = 85):
     """
@@ -208,7 +300,7 @@ def composite_scene(scene_name: str, design_path: str = None, output_path: str =
         design_path: Path to rug design image (optional, uses red placeholder if not provided)
         output_path: Output file path (default: {scene_name}.webp)
         shadow_intensity: Shadow intensity (0-2)
-        rug_thickness: Rug edge thickness in pixels (at final resolution)
+        rug_thickness: Deprecated, kept for CLI compatibility
         debug: Enable debug output
         skip_render: Skip rug rendering (texture and seam effects)
         texture_strength: Texture effect strength (0-1)
@@ -216,45 +308,12 @@ def composite_scene(scene_name: str, design_path: str = None, output_path: str =
         scene_dir: Scene templates directory (default: SCENE_TEMPLATES_DIR)
         webp_quality: WebP quality (1-100, default: 85)
     """
-    SCALE_FACTOR = scale_factor  # 超采样倍率
-
-    # 默认输出文件名为场景名称
     if output_path is None:
         output_path = f"{scene_name}.webp"
 
     config = load_scene_config(scene_name, scene_dir)
+    assets = prepare_scene_assets(load_template_images(config))
 
-    # 保存原始尺寸
-    scene_rgb_orig = np.array(Image.open(config["image_path"]).convert("RGB"))
-    orig_h, orig_w = scene_rgb_orig.shape[:2]
-
-    # 放大2倍处理
-    h, w = orig_h * SCALE_FACTOR, orig_w * SCALE_FACTOR
-    scene_rgb = cv2.resize(scene_rgb_orig, (w, h), interpolation=cv2.INTER_LINEAR)
-
-    shadow_ref_rgb_orig = np.array(Image.open(config["wf_path"]).convert("RGB"))
-
-    # 检查并调整 wf 图尺寸
-    wf_h, wf_w = shadow_ref_rgb_orig.shape[:2]
-    wf_ratio = wf_w / wf_h
-    scene_ratio = orig_w / orig_h
-
-    if abs(wf_ratio - scene_ratio) > 0.01:
-        print(f"警告: wf 图比例 ({wf_w}x{wf_h}, {wf_ratio:.3f}) 与原图比例 ({orig_w}x{orig_h}, {scene_ratio:.3f}) 不一致")
-
-    # 先调整到原始尺寸，再放大2倍
-    if wf_h != orig_h or wf_w != orig_w:
-        print(f"自动调整 wf 图尺寸: {wf_w}x{wf_h} -> {orig_w}x{orig_h}")
-        shadow_ref_rgb_orig = cv2.resize(shadow_ref_rgb_orig, (orig_w, orig_h), interpolation=cv2.INTER_LINEAR)
-
-    # 放大2倍
-    shadow_ref_rgb = cv2.resize(shadow_ref_rgb_orig, (w, h), interpolation=cv2.INTER_LINEAR)
-
-    # 缩放角点坐标到2倍尺寸
-    scaled_corners = [(int(x * SCALE_FACTOR), int(y * SCALE_FACTOR)) for x, y in config["corners"]]
-    config["corners"] = scaled_corners
-
-    # 加载或创建地毯图像
     if design_path:
         rug_pil = Image.open(design_path).convert("RGBA")
         print(f"加载地毯图像: {design_path}")
@@ -262,86 +321,32 @@ def composite_scene(scene_name: str, design_path: str = None, output_path: str =
         rug_pil = Image.new("RGBA", (1000, 1000), (255, 0, 0, 255))
         print("使用红色占位地毯")
 
-    # 渲染地毯（在2倍尺寸下）
     if not skip_render:
         print("应用地毯材质渲染...")
-
-        # 计算目标渲染尺寸（放大2倍）
         suitable_rug_size = config.get("suitable_rug_size")
-        if suitable_rug_size and suitable_rug_size in SIZE_CONFIGS:
-            # 使用 SIZE_CONFIGS 中的预定义尺寸，并放大2倍
-            size_config = SIZE_CONFIGS[suitable_rug_size]
-            target_w = size_config["target_width"] * SCALE_FACTOR
-            target_h = size_config["target_height"] * SCALE_FACTOR
-            print(f"使用地毯尺寸: {suitable_rug_size} (渲染为 {target_w}x{target_h}, 2倍超采样)")
-        else:
-            # 如果没有指定尺寸或尺寸不在配置中，使用地毯当前尺寸并放大2倍
-            orig_target_w, orig_target_h = rug_pil.size
-            target_w = orig_target_w * SCALE_FACTOR
-            target_h = orig_target_h * SCALE_FACTOR
+        if suitable_rug_size not in SIZE_CONFIGS:
             if suitable_rug_size:
-                print(f"警告: 尺寸 {suitable_rug_size} 不在 SIZE_CONFIGS 中，使用原始尺寸x2: {target_w}x{target_h}")
-            else:
-                print(f"使用地毯原始尺寸x2: {target_w}x{target_h}")
-
-        rug_pil_rendered = render_rug_image(
-            rug_pil,
-            target_w=target_w,
-            target_h=target_h,
-            texture_strength=texture_strength,
-        )
-        rug_rgba = rgba_to_numpy(rug_pil_rendered)
+                print(f"警告: 尺寸 {suitable_rug_size} 不在 SIZE_CONFIGS 中，回退到 {DEFAULT_SIZE}")
+            suitable_rug_size = DEFAULT_SIZE
+        print(f"使用地毯尺寸: {suitable_rug_size}")
+        rendered_rug = render_design(rug_pil, size=suitable_rug_size, texture_strength=texture_strength)
         print("地毯渲染完成")
     else:
         print("跳过地毯渲染")
-        rug_rgba = np.array(rug_pil)
+        rendered_rug = rug_pil
 
-    src_pts = np.float32([(0, 0), (rug_rgba.shape[1], 0), (rug_rgba.shape[1], rug_rgba.shape[0]), (0, rug_rgba.shape[0])])
-    dst_pts = np.float32(config["corners"])
-    M = cv2.getPerspectiveTransform(src_pts, dst_pts)
+    result = composite_rendered_to_scene(
+        rendered_rug,
+        template=config,
+        assets=assets,
+        shadow_intensity=shadow_intensity,
+        scale_factor=scale_factor,
+    )
 
-    warped_rgb = cv2.warpPerspective(rug_rgba[:, :, :3], M, (w, h), flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_REPLICATE)
-    warped_alpha = cv2.warpPerspective(rug_rgba[:, :, 3], M, (w, h), flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_CONSTANT, borderValue=0)
-    warped_rug = np.dstack([warped_rgb, warped_alpha])
+    if rug_thickness != THICKNESS and debug:
+        print(f"提示: 当前算法固定使用厚度 {THICKNESS}px，忽略传入值 {rug_thickness}")
 
-    top_mask = warped_rug[:, :, 3].copy()
-    # 厚度参数也需要放大2倍
-    warped_rug = add_thickness_to_visible_edges(warped_rug, config["corners"], thickness=rug_thickness * SCALE_FACTOR)
-    warped_rug = apply_lighting(warped_rug, shadow_ref_rgb, shadow_intensity)
-
-    # 模糊半径放大2倍
-    warped_rug = gaussian_blur_edges(warped_rug, radius=1 * SCALE_FACTOR, erode=True)
-    alpha = warped_rug[:, :, 3].astype(np.float32) / 255.0
-    result = scene_rgb.astype(np.float32)
-    for c in range(3):
-        result[:, :, c] = result[:, :, c] * (1.0 - alpha) + warped_rug[:, :, c].astype(np.float32) * alpha
-
-    if config["fg_path"]:
-        fg_orig = np.array(Image.open(config["fg_path"]).convert("RGBA"))
-        fg_h, fg_w = fg_orig.shape[:2]
-        fg_ratio = fg_w / fg_h
-
-        if abs(fg_ratio - scene_ratio) > 0.01:
-            print(f"警告: fg 图比例 ({fg_w}x{fg_h}, {fg_ratio:.3f}) 与原图比例 ({orig_w}x{orig_h}, {scene_ratio:.3f}) 不一致")
-
-        # 先调整到原始尺寸，再放大2倍
-        if fg_h != orig_h or fg_w != orig_w:
-            print(f"自动调整 fg 图尺寸: {fg_w}x{fg_h} -> {orig_w}x{orig_h}")
-            fg_orig = cv2.resize(fg_orig, (orig_w, orig_h), interpolation=cv2.INTER_LINEAR)
-
-        fg = cv2.resize(fg_orig, (w, h), interpolation=cv2.INTER_LINEAR)
-
-        # 模糊半径放大2倍
-        fg = gaussian_blur_edges(fg, radius=2 * SCALE_FACTOR, erode=False)
-        fg_a = fg[:, :, 3].astype(np.float32) / 255.0
-        for c in range(3):
-            result[:, :, c] = result[:, :, c] * (1.0 - fg_a) + fg[:, :, c].astype(np.float32) * fg_a
-
-    # 缩小回原始尺寸
-    result_orig = cv2.resize(result.astype(np.uint8), (orig_w, orig_h), interpolation=cv2.INTER_AREA)
-
-    # 保存为 WebP 格式
-    Image.fromarray(result_orig).save(output_path, format='WEBP', quality=webp_quality, method=6)
+    result.save(output_path, format='WEBP', quality=webp_quality, method=6)
     print(f"已保存: {output_path}")
 
 if __name__ == "__main__":
@@ -354,7 +359,7 @@ if __name__ == "__main__":
     parser.add_argument("--thickness", type=int, default=6, help="Rug edge thickness in pixels")
     parser.add_argument("--debug", action="store_true", help="Enable debug output")
     parser.add_argument("--skip-render", action="store_true", help="Skip rug texture/seam rendering")
-    parser.add_argument("--texture-strength", type=float, default=0.65, help="Texture effect strength (0-1)")
+    parser.add_argument("--texture-strength", type=float, default=0.55, help="Texture effect strength (0-1)")
     parser.add_argument("--scale-factor", type=int, default=2, help="Supersampling factor (default: 2)")
     parser.add_argument("--webp-quality", type=int, default=85, help="WebP quality (1-100, default: 85)")
     args = parser.parse_args()
