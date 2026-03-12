@@ -391,6 +391,11 @@ class CornerMarker {
         `suitable_rug_size: ${this.selectedRugSize}`
       );
 
+      if (!/suitable_rug_size:\s*[\dx]+/.test(content)) {
+        content = content.replace(/\s*$/, '\n');
+        content += `suitable_rug_size: ${this.selectedRugSize}\n`;
+      }
+
       return content;
     }
 
